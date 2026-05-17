@@ -1,4 +1,5 @@
 import { chromium, type Browser, type BrowserContext } from 'playwright';
+import type { PlaywrightProxy } from './proxy.js';
 
 /**
  * Persistent Playwright browser. One Chromium process per server, contexts
@@ -10,11 +11,13 @@ import { chromium, type Browser, type BrowserContext } from 'playwright';
 export class BrowserPool {
   private browser: Browser | null = null;
   private size: number;
+  private proxy?: PlaywrightProxy;
   private inUse = 0;
   private waiters: Array<() => void> = [];
 
-  constructor(size: number) {
+  constructor(size: number, proxy?: PlaywrightProxy) {
     this.size = size;
+    this.proxy = proxy;
   }
 
   async start(): Promise<void> {
@@ -27,6 +30,7 @@ export class BrowserPool {
         '--disable-gpu',
         '--disable-blink-features=AutomationControlled',
       ],
+      ...(this.proxy ? { proxy: this.proxy } : {}),
     });
   }
 

@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import type { AnyNode } from 'domhandler';
+import TurndownService from 'turndown';
 
 export interface PageMetadata {
   title: string | null;
@@ -94,78 +94,29 @@ export function extractMetadata(html: string, pageUrl: string): PageMetadata {
   };
 }
 
+// Single Turndown instance — configuration is stateless across calls.
+const turndown = new TurndownService({
+  headingStyle: 'atx',
+  hr: '---',
+  bulletListMarker: '-',
+  codeBlockStyle: 'fenced',
+  fence: '```',
+  emDelimiter: '*',
+  strongDelimiter: '**',
+  linkStyle: 'inlined',
+});
+
 /**
- * Convert HTML to LLM-friendly markdown-lite. Strips scripts, styles, and
- * navigation chrome; preserves headings and paragraph structure.
- *
- * Lightweight (no remark/turndown) — good enough for agent context. If you
- * need fidelity, swap in turndown later.
+ * Convert HTML to markdown using turndown. Strips scripts/styles/iframes/svg
+ * up-front via cheerio and preserves headings, links, lists, code blocks,
+ * blockquotes, and inline emphasis. Replaces the previous hand-rolled walker.
  */
-export function htmlToMarkdownLite(html: string): string {
+export function htmlToMarkdown(html: string): string {
   const $ = cheerio.load(html);
   $('script, style, noscript, iframe, svg').remove();
-
-  const lines: string[] = [];
-  const walk = (node: AnyNode, depth = 0): void => {
-    if (node.type === 'text') {
-      const text = (node.data ?? '').replace(/\s+/g, ' ').trim();
-      if (text) lines.push(text);
-      return;
-    }
-    if (node.type !== 'tag') return;
-    const tag = node.tagName.toLowerCase();
-
-    const passThrough = (): void => {
-      for (const child of node.children) walk(child, depth);
-    };
-
-    switch (tag) {
-      case 'h1':
-        lines.push(`\n# ${$(node).text().trim()}\n`);
-        break;
-      case 'h2':
-        lines.push(`\n## ${$(node).text().trim()}\n`);
-        break;
-      case 'h3':
-        lines.push(`\n### ${$(node).text().trim()}\n`);
-        break;
-      case 'h4':
-        lines.push(`\n#### ${$(node).text().trim()}\n`);
-        break;
-      case 'p':
-      case 'div':
-      case 'section':
-      case 'article':
-      case 'main':
-        lines.push('');
-        passThrough();
-        lines.push('');
-        break;
-      case 'li':
-        lines.push(`- ${$(node).text().trim()}`);
-        break;
-      case 'a': {
-        const href = $(node).attr('href');
-        const text = $(node).text().trim();
-        if (href && text) lines.push(`[${text}](${href})`);
-        else passThrough();
-        break;
-      }
-      case 'br':
-        lines.push('');
-        break;
-      default:
-        passThrough();
-    }
-  };
-
-  const body = $('body')[0];
-  if (body) {
-    for (const child of body.children) walk(child);
-  }
-
-  return lines
-    .join('\n')
+  const body = $('body').html() ?? $.html();
+  return turndown
+    .turndown(body)
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

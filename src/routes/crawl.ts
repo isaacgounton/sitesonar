@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../config.js';
 import type { JobStore } from '../jobs.js';
+import { deriveProxy } from '../proxy.js';
 import { runCrawl, type CrawlResult } from '../services/crawler.js';
 
 const CrawlBody = z.object({
@@ -48,29 +49,30 @@ export const crawlRoutes =
           return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
         }
         const body = parsed.data;
-        const job = deps.jobs.create<CrawlResult>();
+        const job = await deps.jobs.create<CrawlResult>();
 
         // Fire and forget. Errors land on the job record.
         void (async () => {
-          deps.jobs.markRunning(job.id);
+          await deps.jobs.markRunning(job.id);
+          let processed = 0;
           try {
             const result = await runCrawl({
               startUrl: body.startUrl,
               maxRequests: body.maxRequests ?? deps.config.crawlMaxRequests,
               concurrency: body.concurrency ?? deps.config.crawlDefaultConcurrency,
               sameOriginOnly: body.sameOriginOnly,
+              proxy: deriveProxy(deps.config),
               onPage(page) {
-                deps.jobs.updateProgress(job.id, deps.jobs.get(job.id)?.progress?.processed
-                  ? (deps.jobs.get(job.id)?.progress?.processed ?? 0) + 1
-                  : 1);
+                processed += 1;
+                void deps.jobs.updateProgress(job.id, processed);
                 req.log.debug(`Crawled ${page.url}`);
               },
             });
-            deps.jobs.markSucceeded(job.id, result);
+            await deps.jobs.markSucceeded(job.id, result);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             req.log.warn({ err }, `crawl ${job.id} failed`);
-            deps.jobs.markFailed(job.id, msg);
+            await deps.jobs.markFailed(job.id, msg);
           }
         })();
 
@@ -101,7 +103,7 @@ export const crawlRoutes =
         },
       },
       async (req, reply) => {
-        const job = deps.jobs.get(req.params.id);
+        const job = await deps.jobs.get(req.params.id);
         if (!job) return reply.code(404).send({ error: 'job_not_found' });
         return job;
       },

@@ -1,5 +1,6 @@
 import { PlaywrightCrawler, RequestQueue, type PlaywrightCrawlingContext } from 'crawlee';
 import { extractMetadata, type PageMetadata } from './extract.js';
+import type { PlaywrightProxy } from '../proxy.js';
 
 export interface CrawlPage {
   url: string;
@@ -15,6 +16,7 @@ export interface CrawlOptions {
   maxRequests: number;
   concurrency: number;
   sameOriginOnly: boolean;
+  proxy?: PlaywrightProxy;
   onPage?: (page: CrawlPage) => void;
 }
 
@@ -62,6 +64,7 @@ export async function runCrawl(opts: CrawlOptions): Promise<CrawlResult> {
     launchContext: {
       launchOptions: {
         args: ['--no-sandbox', '--disable-dev-shm-usage'],
+        ...(opts.proxy ? { proxy: opts.proxy } : {}),
       },
     },
     async requestHandler(ctx: PlaywrightCrawlingContext) {

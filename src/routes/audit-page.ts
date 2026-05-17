@@ -74,7 +74,7 @@ export const auditPageRoutes =
         }
 
         const metadata = extractMetadata(html, finalUrl);
-        const structuredData = analyzeStructuredData(html);
+        const structuredData = await analyzeStructuredData(html);
 
         // 2. Lighthouse (separate Chrome instance to avoid stomping on our pool).
         let lighthouse: Awaited<ReturnType<typeof runLighthouse>> | null = null;

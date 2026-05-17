@@ -23,6 +23,18 @@ const ConfigSchema = z.object({
   screenshotTimeoutMs: z.coerce.number().int().positive().default(20_000),
   browserPoolSize: z.coerce.number().int().positive().default(3),
   crawleeStorageDir: z.string().default('/tmp/crawlee'),
+  proxyUrl: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  proxyBypass: z.string().optional(),
+  redisUrl: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  jobTtlSeconds: z.coerce.number().int().positive().default(86_400),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -41,6 +53,10 @@ export function loadConfig(): Config {
     screenshotTimeoutMs: process.env.SCREENSHOT_TIMEOUT_MS,
     browserPoolSize: process.env.BROWSER_POOL_SIZE,
     crawleeStorageDir: process.env.CRAWLEE_STORAGE_DIR,
+    proxyUrl: process.env.PROXY_URL,
+    proxyBypass: process.env.PROXY_BYPASS,
+    redisUrl: process.env.REDIS_URL,
+    jobTtlSeconds: process.env.JOB_TTL_SECONDS,
   });
 
   if (!parsed.success) {

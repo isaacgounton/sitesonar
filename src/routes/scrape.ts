@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { BrowserPool } from '../browser.js';
 import type { Config } from '../config.js';
-import { extractMetadata, htmlToMarkdownLite } from '../services/extract.js';
+import { extractMetadata, htmlToMarkdown } from '../services/extract.js';
 
 const ScrapeBody = z.object({
   url: z.string().url(),
@@ -83,7 +83,7 @@ export const scrapeRoutes =
             finalUrl,
             status,
             metadata,
-            ...(body.includeMarkdown ? { markdown: htmlToMarkdownLite(html) } : {}),
+            ...(body.includeMarkdown ? { markdown: htmlToMarkdown(html) } : {}),
             ...(body.includeHtml ? { html } : {}),
             fetchedAt: new Date().toISOString(),
           };

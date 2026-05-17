@@ -5,7 +5,8 @@ import swaggerUi from '@fastify/swagger-ui';
 import { loadConfig } from './config.js';
 import { authPlugin } from './auth.js';
 import { BrowserPool } from './browser.js';
-import { JobStore } from './jobs.js';
+import { deriveProxy } from './proxy.js';
+import { createJobStore, type JobStore } from './jobs.js';
 import { healthRoutes } from './routes/health.js';
 import { scrapeRoutes } from './routes/scrape.js';
 import { screenshotRoutes } from './routes/screenshot.js';
@@ -77,11 +78,17 @@ async function main(): Promise<void> {
   await app.register(authPlugin, { apiKeys: config.apiKeys });
 
   // Shared state
-  const browser = new BrowserPool(config.browserPoolSize);
+  const proxy = deriveProxy(config);
+  if (proxy) app.log.info(`Outbound proxy: ${proxy.server}`);
+  const browser = new BrowserPool(config.browserPoolSize, proxy);
   await browser.start();
   app.log.info(`Browser pool started (size=${config.browserPoolSize})`);
 
-  const jobs = new JobStore();
+  const jobs: JobStore = await createJobStore({
+    redisUrl: config.redisUrl,
+    jobTtlSeconds: config.jobTtlSeconds,
+    logger: app.log,
+  });
 
   // Routes
   await app.register(healthRoutes({ jobs, startedAt }));
@@ -96,6 +103,7 @@ async function main(): Promise<void> {
     try {
       await app.close();
       await browser.stop();
+      await jobs.close?.();
       process.exit(0);
     } catch (err) {
       app.log.error({ err }, 'Error during shutdown');
