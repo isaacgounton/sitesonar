@@ -4,12 +4,14 @@ import type { Config } from '../config.js';
 import type { JobStore } from '../jobs.js';
 import { deriveProxy } from '../proxy.js';
 import { runCrawl, type CrawlResult } from '../services/crawler.js';
+import { dispatchWebhook } from '../webhooks.js';
 
 const CrawlBody = z.object({
   startUrl: z.string().url(),
   maxRequests: z.number().int().positive().max(500).optional(),
   concurrency: z.number().int().positive().max(20).optional(),
   sameOriginOnly: z.boolean().default(true),
+  webhookUrl: z.string().url().optional(),
 });
 
 interface CrawlDeps {
@@ -39,6 +41,12 @@ export const crawlRoutes =
               maxRequests: { type: 'integer', minimum: 1, maximum: 500 },
               concurrency: { type: 'integer', minimum: 1, maximum: 20 },
               sameOriginOnly: { type: 'boolean', default: true },
+              webhookUrl: {
+                type: 'string',
+                format: 'uri',
+                description:
+                  'Optional URL to POST the final job (succeeded or failed) when the crawl completes. Body is HMAC-SHA256-signed in X-Sitesonar-Signature when WEBHOOK_SECRET is configured.',
+              },
             },
           },
         },
@@ -73,6 +81,15 @@ export const crawlRoutes =
             const msg = err instanceof Error ? err.message : String(err);
             req.log.warn({ err }, `crawl ${job.id} failed`);
             await deps.jobs.markFailed(job.id, msg);
+          }
+          if (body.webhookUrl) {
+            const finalJob = await deps.jobs.get(job.id);
+            void dispatchWebhook({
+              url: body.webhookUrl,
+              payload: finalJob,
+              secret: deps.config.webhookSecret,
+              logger: req.log,
+            });
           }
         })();
 

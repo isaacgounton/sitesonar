@@ -58,6 +58,7 @@ const ConfigSchema = z.object({
   extractTimeoutMs: z.coerce.number().int().positive().default(30_000),
   techTimeoutMs: z.coerce.number().int().positive().default(30_000),
   rateLimitPerMin: z.coerce.number().int().positive().default(60),
+  webhookSecret: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -97,6 +98,7 @@ export function loadConfig(): Config {
     extractTimeoutMs: process.env.EXTRACT_TIMEOUT_MS,
     techTimeoutMs: process.env.TECH_TIMEOUT_MS,
     rateLimitPerMin: process.env.RATE_LIMIT_PER_MIN,
+    webhookSecret: process.env.WEBHOOK_SECRET,
   });
 
   if (!parsed.success) {
