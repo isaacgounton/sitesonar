@@ -1,6 +1,6 @@
 import type { Config } from '../config.js';
 
-export type ProviderName = 'searxng' | 'brave' | 'google' | 'serper' | 'tavily';
+export type ProviderName = 'searxng' | 'brave' | 'google' | 'serpapi' | 'serper' | 'tavily';
 
 export interface SearchQuery {
   query: string;
@@ -224,9 +224,84 @@ class GoogleCseProvider implements SearchProvider {
   }
 }
 
+// ─── SerpAPI ───────────────────────────────────────────────────────────────
+// 100 queries/mo free. Real Google SERPs with the richest feature coverage:
+// answer box, knowledge graph, related questions, related searches.
+// Different service from Serper.dev (similar name, totally different auth and
+// response shape). https://serpapi.com
+
+class SerpapiProvider implements SearchProvider {
+  readonly name = 'serpapi' as const;
+  constructor(private apiKey?: string) {}
+  isConfigured(): boolean {
+    return !!this.apiKey;
+  }
+  async search(q: SearchQuery, signal: AbortSignal): Promise<SearchData> {
+    const params = new URLSearchParams({
+      engine: 'google',
+      q: q.query,
+      num: String(q.num),
+      api_key: this.apiKey!,
+    });
+    if (q.country) params.set('gl', q.country);
+    if (q.lang) params.set('hl', q.lang);
+    const data = (await fetchJson(
+      `https://serpapi.com/search?${params}`,
+      { method: 'GET' },
+      signal,
+    )) as {
+      organic_results?: Array<{
+        position?: number;
+        title?: string;
+        link?: string;
+        snippet?: string;
+        displayed_link?: string;
+      }>;
+      related_questions?: Array<{ question?: string }>;
+      related_searches?: Array<{ query?: string }>;
+      answer_box?: { title?: string; link?: string; snippet?: string; answer?: string };
+      knowledge_graph?: { title?: string; type?: string; description?: string };
+      search_information?: { total_results?: number };
+      error?: string;
+    };
+    if (data.error) throw new Error(`SerpAPI: ${data.error}`);
+    const organic: OrganicResult[] = (data.organic_results ?? []).map((r, i) => ({
+      position: r.position ?? i + 1,
+      title: r.title ?? '',
+      link: r.link ?? '',
+      snippet: r.snippet ?? '',
+      displayLink: r.displayed_link ?? safeDisplayLink(r.link ?? ''),
+    }));
+    const features = emptyFeatures();
+    if (data.answer_box) {
+      features.featuredSnippet = {
+        title: data.answer_box.title ?? null,
+        link: data.answer_box.link ?? null,
+        snippet: data.answer_box.snippet ?? data.answer_box.answer ?? null,
+      };
+    }
+    if (data.knowledge_graph) {
+      features.knowledgePanel = {
+        title: data.knowledge_graph.title ?? null,
+        type: data.knowledge_graph.type ?? null,
+        description: data.knowledge_graph.description ?? null,
+      };
+    }
+    return {
+      organic,
+      paa: (data.related_questions ?? []).map((p) => p.question ?? '').filter(Boolean),
+      related: (data.related_searches ?? []).map((r) => r.query ?? '').filter(Boolean),
+      features,
+      totalResults: data.search_information?.total_results ?? null,
+    };
+  }
+}
+
 // ─── Serper.dev ────────────────────────────────────────────────────────────
 // ~2,500 free credits on sign-up. Real Google SERPs with rich features:
-// PAA, related searches, answer box, knowledge graph.
+// PAA, related searches, answer box, knowledge graph. Different service
+// from SerpAPI (similar name, totally different auth and response shape).
+// https://serper.dev
 
 class SerperProvider implements SearchProvider {
   readonly name = 'serper' as const;
@@ -357,6 +432,7 @@ export function buildProviders(config: Config): SearchProvider[] {
     searxng: new SearxngProvider(config.searxngUrl),
     brave: new BraveProvider(config.braveSearchApiKey),
     google: new GoogleCseProvider(config.googleSearchApiKey, config.googleSearchCx),
+    serpapi: new SerpapiProvider(config.serpapiApiKey),
     serper: new SerperProvider(config.serperApiKey),
     tavily: new TavilyProvider(config.tavilyApiKey),
   };

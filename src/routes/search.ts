@@ -14,7 +14,9 @@ const SearchBody = z.object({
   num: z.number().int().min(1).max(50).default(10),
   country: z.string().min(2).max(2).optional(),
   lang: z.string().min(2).max(5).optional(),
-  engine: z.enum(['searxng', 'brave', 'google', 'serper', 'tavily']).optional(),
+  engine: z
+    .enum(['searxng', 'brave', 'google', 'serpapi', 'serper', 'tavily'])
+    .optional(),
 });
 
 interface SearchDeps {
@@ -57,7 +59,7 @@ export const searchRoutes =
               },
               engine: {
                 type: 'string',
-                enum: ['searxng', 'brave', 'google', 'serper', 'tavily'],
+                enum: ['searxng', 'brave', 'google', 'serpapi', 'serper', 'tavily'],
                 description: 'Force a specific provider; otherwise the fallback chain runs.',
               },
             },
@@ -92,7 +94,7 @@ export const searchRoutes =
             return reply.code(503).send({
               error: 'no_providers_configured',
               message:
-                'No search providers are available. Configure at least one of SEARXNG_URL, BRAVE_SEARCH_API_KEY, GOOGLE_SEARCH_API_KEY+GOOGLE_SEARCH_CX, SERPER_API_KEY, or TAVILY_API_KEY.',
+                'No search providers are available. Configure at least one of SEARXNG_URL, BRAVE_SEARCH_API_KEY, GOOGLE_SEARCH_API_KEY+GOOGLE_SEARCH_CX, SERPAPI_KEY, SERPER_API_KEY, or TAVILY_API_KEY.',
             });
           }
           if (err instanceof ProviderNotConfiguredError) {

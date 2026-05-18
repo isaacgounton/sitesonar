@@ -38,8 +38,8 @@ const ConfigSchema = z.object({
   // Search providers — comma-separated list defines the fallback order.
   // Each provider is only used if its credentials are configured below.
   searchProviders: z
-    .array(z.enum(['searxng', 'brave', 'google', 'serper', 'tavily']))
-    .default(['searxng', 'brave', 'google', 'serper', 'tavily']),
+    .array(z.enum(['searxng', 'brave', 'google', 'serpapi', 'serper', 'tavily']))
+    .default(['searxng', 'brave', 'google', 'serpapi', 'serper', 'tavily']),
   searxngUrl: z
     .string()
     .url()
@@ -48,6 +48,7 @@ const ConfigSchema = z.object({
   braveSearchApiKey: z.string().optional(),
   googleSearchApiKey: z.string().optional(),
   googleSearchCx: z.string().optional(),
+  serpapiApiKey: z.string().optional(),
   serperApiKey: z.string().optional(),
   tavilyApiKey: z.string().optional(),
   searchTimeoutMs: z.coerce.number().int().positive().default(8_000),
@@ -80,6 +81,7 @@ export function loadConfig(): Config {
     braveSearchApiKey: process.env.BRAVE_SEARCH_API_KEY,
     googleSearchApiKey: process.env.GOOGLE_SEARCH_API_KEY,
     googleSearchCx: process.env.GOOGLE_SEARCH_CX,
+    serpapiApiKey: process.env.SERPAPI_KEY,
     serperApiKey: process.env.SERPER_API_KEY,
     tavilyApiKey: process.env.TAVILY_API_KEY,
     searchTimeoutMs: process.env.SEARCH_TIMEOUT_MS,
