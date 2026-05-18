@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /api/
+Allow: /api/public/
+Crawl-delay: 1
+
+Sitemap: https://example.com/sitemap.xml

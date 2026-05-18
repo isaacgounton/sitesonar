@@ -53,6 +53,7 @@ const ConfigSchema = z.object({
   tavilyApiKey: z.string().optional(),
   searchTimeoutMs: z.coerce.number().int().positive().default(8_000),
   securityTimeoutMs: z.coerce.number().int().positive().default(10_000),
+  robotsTimeoutMs: z.coerce.number().int().positive().default(10_000),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -87,6 +88,7 @@ export function loadConfig(): Config {
     tavilyApiKey: process.env.TAVILY_API_KEY,
     searchTimeoutMs: process.env.SEARCH_TIMEOUT_MS,
     securityTimeoutMs: process.env.SECURITY_TIMEOUT_MS,
+    robotsTimeoutMs: process.env.ROBOTS_TIMEOUT_MS,
   });
 
   if (!parsed.success) {
