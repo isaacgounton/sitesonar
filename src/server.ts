@@ -18,6 +18,7 @@ import { robotsRoutes } from './routes/robots.js';
 import { sitemapRoutes } from './routes/sitemap.js';
 import { extractRoutes } from './routes/extract.js';
 import { techRoutes } from './routes/tech.js';
+import { exportRoutes } from './routes/export.js';
 import { createKvStore, type KvStore } from './kvstore.js';
 import { rateLimitPlugin } from './ratelimit.js';
 import { usageRoutes } from './routes/usage.js';
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
         { name: 'discovery', description: 'Sitemap and robots.txt parsing' },
         { name: 'extract', description: 'Readability article extraction' },
         { name: 'tech', description: 'Technology stack fingerprinting' },
+        { name: 'export', description: 'Export pages as PDF or Markdown' },
       ],
     },
   });
@@ -144,6 +146,7 @@ async function main(): Promise<void> {
   await app.register(sitemapRoutes({ config }));
   await app.register(extractRoutes({ browser, config, kv }));
   await app.register(techRoutes({ browser, config }));
+  await app.register(exportRoutes({ browser, config }));
   await app.register(usageRoutes({ kv, limitPerMin: config.rateLimitPerMin }));
 
   // Lifecycle

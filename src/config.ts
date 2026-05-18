@@ -60,6 +60,7 @@ const ConfigSchema = z.object({
   rateLimitPerMin: z.coerce.number().int().positive().default(60),
   webhookSecret: z.string().optional(),
   diffTtlDays: z.coerce.number().int().positive().default(30),
+  pdfTimeoutMs: z.coerce.number().int().positive().default(60_000),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -101,6 +102,7 @@ export function loadConfig(): Config {
     rateLimitPerMin: process.env.RATE_LIMIT_PER_MIN,
     webhookSecret: process.env.WEBHOOK_SECRET,
     diffTtlDays: process.env.DIFF_TTL_DAYS,
+    pdfTimeoutMs: process.env.PDF_TIMEOUT_MS,
   });
 
   if (!parsed.success) {
