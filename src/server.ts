@@ -14,6 +14,7 @@ import { auditPageRoutes } from './routes/audit-page.js';
 import { crawlRoutes } from './routes/crawl.js';
 import { searchRoutes } from './routes/search.js';
 import { securityRoutes } from './routes/security.js';
+import { robotsRoutes } from './routes/robots.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -56,6 +57,7 @@ async function main(): Promise<void> {
         { name: 'crawl', description: 'Multi-page crawls (async jobs)' },
         { name: 'search', description: 'Web search through a provider chain' },
         { name: 'security', description: 'HTTP security headers grading' },
+        { name: 'discovery', description: 'Sitemap and robots.txt parsing' },
       ],
     },
   });
@@ -102,6 +104,7 @@ async function main(): Promise<void> {
   await app.register(crawlRoutes({ jobs, config }));
   await app.register(searchRoutes({ config }));
   await app.register(securityRoutes({ config }));
+  await app.register(robotsRoutes({ config }));
 
   // Lifecycle
   const shutdown = async (signal: string): Promise<void> => {
