@@ -15,6 +15,7 @@ import { crawlRoutes } from './routes/crawl.js';
 import { searchRoutes } from './routes/search.js';
 import { securityRoutes } from './routes/security.js';
 import { robotsRoutes } from './routes/robots.js';
+import { sitemapRoutes } from './routes/sitemap.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -105,6 +106,7 @@ async function main(): Promise<void> {
   await app.register(searchRoutes({ config }));
   await app.register(securityRoutes({ config }));
   await app.register(robotsRoutes({ config }));
+  await app.register(sitemapRoutes({ config }));
 
   // Lifecycle
   const shutdown = async (signal: string): Promise<void> => {
