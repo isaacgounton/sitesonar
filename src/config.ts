@@ -35,6 +35,22 @@ const ConfigSchema = z.object({
     .optional()
     .or(z.literal('').transform(() => undefined)),
   jobTtlSeconds: z.coerce.number().int().positive().default(86_400),
+  // Search providers — comma-separated list defines the fallback order.
+  // Each provider is only used if its credentials are configured below.
+  searchProviders: z
+    .array(z.enum(['searxng', 'brave', 'google', 'serper', 'tavily']))
+    .default(['searxng', 'brave', 'google', 'serper', 'tavily']),
+  searxngUrl: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  braveSearchApiKey: z.string().optional(),
+  googleSearchApiKey: z.string().optional(),
+  googleSearchCx: z.string().optional(),
+  serperApiKey: z.string().optional(),
+  tavilyApiKey: z.string().optional(),
+  searchTimeoutMs: z.coerce.number().int().positive().default(8_000),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -57,6 +73,16 @@ export function loadConfig(): Config {
     proxyBypass: process.env.PROXY_BYPASS,
     redisUrl: process.env.REDIS_URL,
     jobTtlSeconds: process.env.JOB_TTL_SECONDS,
+    searchProviders: process.env.SEARCH_PROVIDERS
+      ? csv(process.env.SEARCH_PROVIDERS)
+      : undefined,
+    searxngUrl: process.env.SEARXNG_URL ?? process.env.SEARCHXNG_URL,
+    braveSearchApiKey: process.env.BRAVE_SEARCH_API_KEY,
+    googleSearchApiKey: process.env.GOOGLE_SEARCH_API_KEY,
+    googleSearchCx: process.env.GOOGLE_SEARCH_CX,
+    serperApiKey: process.env.SERPER_API_KEY,
+    tavilyApiKey: process.env.TAVILY_API_KEY,
+    searchTimeoutMs: process.env.SEARCH_TIMEOUT_MS,
   });
 
   if (!parsed.success) {
