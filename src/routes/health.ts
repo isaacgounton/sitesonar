@@ -1,9 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { JobStore } from '../jobs.js';
+import type { Config } from '../config.js';
 
 interface HealthDeps {
   jobs: JobStore;
   startedAt: Date;
+  config: Config;
 }
 
 export const healthRoutes = (deps: HealthDeps): FastifyPluginAsync => async (app) => {
@@ -11,7 +13,7 @@ export const healthRoutes = (deps: HealthDeps): FastifyPluginAsync => async (app
     '/health',
     {
       schema: {
-        description: 'Liveness probe + queue snapshot. Public (no auth).',
+        description: 'Liveness probe + capacity snapshot. Public (no auth).',
         tags: ['system'],
         response: {
           200: {
@@ -20,6 +22,8 @@ export const healthRoutes = (deps: HealthDeps): FastifyPluginAsync => async (app
               status: { type: 'string' },
               uptimeSeconds: { type: 'number' },
               version: { type: 'string' },
+              browserPoolSize: { type: 'integer' },
+              rateLimitPerMin: { type: 'integer' },
             },
           },
         },
@@ -31,6 +35,8 @@ export const healthRoutes = (deps: HealthDeps): FastifyPluginAsync => async (app
         status: 'ok',
         uptimeSeconds,
         version: process.env.npm_package_version ?? '0.1.0',
+        browserPoolSize: deps.config.browserPoolSize,
+        rateLimitPerMin: deps.config.rateLimitPerMin,
       };
     },
   );

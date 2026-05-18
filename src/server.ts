@@ -135,7 +135,7 @@ async function main(): Promise<void> {
   });
 
   // Routes
-  await app.register(healthRoutes({ jobs, startedAt }));
+  await app.register(healthRoutes({ jobs, startedAt, config }));
   await app.register(scrapeRoutes({ browser, config, kv }));
   await app.register(screenshotRoutes({ browser, config }));
   await app.register(auditPageRoutes({ browser, config }));
