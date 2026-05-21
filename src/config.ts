@@ -61,6 +61,16 @@ const ConfigSchema = z.object({
   webhookSecret: z.string().optional(),
   diffTtlDays: z.coerce.number().int().positive().default(30),
   pdfTimeoutMs: z.coerce.number().int().positive().default(60_000),
+  googlePlacesApiKey: z.string().optional(),
+  hunterApiKey: z.string().optional(),
+  apolloApiKey: z.string().optional(),
+  companyProviders: z
+    .array(z.enum(['hunter', 'google_places', 'schema_org', 'wikidata', 'rdap']))
+    .default(['hunter', 'google_places', 'schema_org', 'wikidata', 'rdap']),
+  contactsProviders: z
+    .array(z.enum(['hunter', 'apollo']))
+    .default(['hunter', 'apollo']),
+  companyTimeoutMs: z.coerce.number().int().positive().default(15_000),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -103,6 +113,16 @@ export function loadConfig(): Config {
     webhookSecret: process.env.WEBHOOK_SECRET,
     diffTtlDays: process.env.DIFF_TTL_DAYS,
     pdfTimeoutMs: process.env.PDF_TIMEOUT_MS,
+    googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY,
+    hunterApiKey: process.env.HUNTER_API_KEY,
+    apolloApiKey: process.env.APOLLO_API_KEY,
+    companyProviders: process.env.COMPANY_PROVIDERS
+      ? csv(process.env.COMPANY_PROVIDERS)
+      : undefined,
+    contactsProviders: process.env.CONTACTS_PROVIDERS
+      ? csv(process.env.CONTACTS_PROVIDERS)
+      : undefined,
+    companyTimeoutMs: process.env.COMPANY_TIMEOUT_MS,
   });
 
   if (!parsed.success) {
