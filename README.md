@@ -35,6 +35,11 @@ POST /v1/export/md     render a URL to Markdown
 POST /v1/search        web search through a free-first provider fallback chain
 POST /v1/company       company firmographics + contacts via a provider chain
 
+— leads pipeline ————————————————————————————————————————————————————————
+POST /v1/leads/scrape  scrape Google Maps for leads by industry + location
+POST /v1/leads/enrich  crawl each lead's website for email, phone, and socials
+POST /v1/leads/hubspot push enriched leads to HubSpot (dedupe by email/phone)
+
 — system ———————————————————————————————————————————————————————————————
 GET  /v1/usage         your current rate-limit quota (exempt from rate limiting)
 GET  /health           liveness probe + capacity snapshot (public, no auth)
@@ -46,6 +51,24 @@ GET  /openapi.json     OpenAPI 3.0 spec (also /openapi.yaml, /docs/json)
 All `/v1/*` endpoints require `Authorization: Bearer <api-key>`. Define keys
 via the `API_KEYS` env var (comma-separated). `/health`, `/healthz`, and the
 spec/docs routes are public.
+
+### Leads pipeline
+
+A three-step lead-generation chain. Endpoints are stateless — pass each step's
+`leads[]` output into the next.
+
+- `POST /v1/leads/scrape` — scrape Google Maps for businesses. Body:
+  `{ "industry": "immigration lawyer", "location": "New York", "max": 20, "proxyUrl": "http://user:pass@host:port" }`
+  (or a raw `query` string instead of `industry`+`location`). `proxyUrl` is
+  optional and falls back to the global `PROXY_URL`. Returns
+  `{ query, count, leads, warnings, fetchedAt }`. Long-running and synchronous.
+- `POST /v1/leads/enrich` — crawl each lead's website for email, phone, socials,
+  and description. Body: `{ "leads": [...], "guessEmails": true, "verifyMx": true, "headlessFallback": true, "concurrency": 3 }`.
+  Returns `{ count, leads, warnings, enrichedAt }`.
+- `POST /v1/leads/hubspot` — push contacts to HubSpot (dedupe by email/phone).
+  Body: `{ "leads": [...], "industry": "immigration lawyer", "token": "pat-...", "dryRun": false }`.
+  `token` falls back to `HUBSPOT_TOKEN`. Returns `{ created, skipped, failed, results, pushedAt }`.
+  Returns HTTP 503 (`hubspot_not_configured`) when no token is available.
 
 ## Cross-cutting features
 
