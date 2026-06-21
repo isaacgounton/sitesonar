@@ -54,19 +54,32 @@ describe('pushContacts', () => {
     expect(calls.some((c) => c.includes('/objects/contacts') && !c.includes('search'))).toBe(false);
   });
 
-  it('counts a failed lead and continues the batch', async () => {
+  it('continues the batch after a failed lead', async () => {
+    let createCalls = 0;
+    let searchCalled = false;
     const fetchImpl = vi.fn(async (url: string | URL | Request) => {
       const u = String(url);
       if (u.includes('/properties/contacts')) return jsonResponse({ results: [] });
-      if (u.includes('/contacts/search')) return jsonResponse({ results: [] });
-      if (u.includes('/objects/contacts')) return jsonResponse({ message: 'bad' }, 400);
+      if (u.includes('/contacts/search')) {
+        searchCalled = true;
+        return jsonResponse({ results: [] });
+      }
+      if (u.includes('/objects/contacts')) {
+        createCalls += 1;
+        // First create fails (non-retryable 400); second succeeds.
+        return createCalls === 1 ? jsonResponse({ message: 'bad' }, 400) : jsonResponse({ id: '777' }, 201);
+      }
       return jsonResponse({}, 404);
     }) as unknown as typeof fetch;
 
     const leads = [lead, { title: 'Beta Corp', email: 'beta@beta.com', phone: '' }];
     const result = await pushContacts({ token: 'pat-x', leads, dryRun: false, fetchImpl });
-    expect(result.failed).toBe(2);
-    expect(result.results.every((r) => r.status === 'failed')).toBe(true);
+
+    expect(result.failed).toBe(1);
+    expect(result.created).toBe(1);
+    expect(result.results[0]!.status).toBe('failed');
     expect(result.results[0]!.error).toBeTruthy();
+    expect(result.results[1]!).toMatchObject({ status: 'created', hubspotId: '777' });
+    expect(searchCalled).toBe(true);
   });
 });
