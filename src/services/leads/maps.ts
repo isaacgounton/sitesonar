@@ -19,6 +19,10 @@ const CONTEXT_OPTS = {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
     '(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
   locale: 'en-US',
+  // Force English regardless of the egress IP's geo. Without this an EU-hosted
+  // IP gets German Maps ("Sterne"/"Geschlossen"), which breaks rating/address
+  // parsing. Reinforced by the hl=en&gl=us query params on the search URL.
+  extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
 };
 
 export async function scrapeGoogleMaps(
@@ -115,7 +119,7 @@ async function runScrape(
   ]);
 
   const page = await context.newPage();
-  const url = `https://www.google.com/maps/search/${encodeURIComponent(args.query)}`;
+  const url = `https://www.google.com/maps/search/${encodeURIComponent(args.query)}?hl=en&gl=us`;
 
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
