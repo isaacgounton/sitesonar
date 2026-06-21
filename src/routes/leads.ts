@@ -18,6 +18,7 @@ const ScrapeBody = z
     industry: z.string().min(2).max(120).optional(),
     location: z.string().min(2).max(120).optional(),
     max: z.number().int().min(1).max(500).default(20),
+    details: z.boolean().default(false),
     proxyUrl: z.string().url().optional(),
     proxyBypass: z.string().optional(),
   })
@@ -68,7 +69,7 @@ export const leadsRoutes =
       {
         schema: {
           description:
-            'Scrape Google Maps for businesses. Provide `query` (raw) or `industry` (+ optional `location`). Optional `proxyUrl` routes this scrape through a per-request proxy (falls back to the global PROXY_URL). Synchronous and long-running; bounded by `max` and LEADS_SCRAPE_TIMEOUT_MS.',
+            'Scrape Google Maps for businesses. Provide `query` (raw) or `industry` (+ optional `location`). Set `details: true` to open each result\'s detail panel for website, phone, full address, review count, and category (the list view omits these) — slower, one navigation per result. Optional `proxyUrl` routes this scrape through a per-request proxy (falls back to the global PROXY_URL). Synchronous and long-running; bounded by `max` and LEADS_SCRAPE_TIMEOUT_MS.',
           tags: ['leads'],
           security: [{ bearerAuth: [] }],
           body: {
@@ -78,6 +79,7 @@ export const leadsRoutes =
               industry: { type: 'string', minLength: 2, maxLength: 120 },
               location: { type: 'string', minLength: 2, maxLength: 120 },
               max: { type: 'integer', minimum: 1, maximum: 500, default: 20, description: 'Number of results to collect. Hard-capped server-side by LEADS_MAX_RESULTS (default 120).' },
+              details: { type: 'boolean', default: false, description: 'Open each result\'s detail panel to extract website/phone/full address/review count/category. Slower (one navigation per result); use a smaller `max`.' },
               proxyUrl: { type: 'string', format: 'uri' },
               proxyBypass: { type: 'string' },
             },
@@ -98,6 +100,7 @@ export const leadsRoutes =
             browser: deps.browser,
             query,
             max,
+            details: body.details,
             proxyUrl: body.proxyUrl,
             proxyBypass: body.proxyBypass,
             timeoutMs: deps.config.leadsScrapeTimeoutMs,

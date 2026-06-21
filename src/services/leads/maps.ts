@@ -11,6 +11,12 @@ export interface ScrapeArgs {
   proxyUrl?: string;
   proxyBypass?: string;
   timeoutMs: number;
+  /**
+   * When true, open each result's detail panel to extract website, phone, full
+   * address, review count, and category — fields the list view doesn't expose.
+   * One navigation per result, so it's slower; bounded by the overall timeout.
+   */
+  details: boolean;
 }
 
 const CONTEXT_OPTS = {
@@ -189,7 +195,77 @@ async function runScrape(
   }
 
   leads.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-  return { leads: leads.slice(0, args.max), warnings };
+  const finalLeads = leads.slice(0, args.max);
+
+  // Optional second pass: open each place's detail panel for the fields the
+  // list cards omit (website, phone, full address, review count, category).
+  // Reuse the same page; stop when the time budget is nearly spent.
+  if (args.details) {
+    for (const lead of finalLeads) {
+      if (Date.now() > deadline - 5_000) {
+        warnings.push('detail extraction stopped at time budget');
+        break;
+      }
+      try {
+        await augmentWithDetails(page, lead);
+      } catch {
+        warnings.push(`${lead.title}: detail panel fetch failed`);
+      }
+    }
+  }
+
+  return { leads: finalLeads, warnings };
+}
+
+/**
+ * Open a place's detail panel (via its Maps link) and fill in fields the list
+ * card doesn't carry. Mutates `lead` in place, only overwriting when the panel
+ * yields a value. Selectors use Google's stable-ish `data-item-id` panel
+ * attributes (`authority` = website, `phone:tel:` = phone, `address`).
+ */
+async function augmentWithDetails(page: Page, lead: Lead): Promise<void> {
+  if (!lead.googleMapsLink) return;
+  await page.goto(lead.googleMapsLink, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.waitForSelector('h1', { timeout: 10_000 }).catch(() => {});
+
+  const d = await page.evaluate(() => {
+    const text = (el: Element | null): string => (el?.textContent ?? '').trim();
+    const website =
+      (document.querySelector('a[data-item-id="authority"]') as HTMLAnchorElement | null)?.href ?? '';
+
+    const phoneBtn = document.querySelector('button[data-item-id^="phone:tel:"]');
+    const phone = phoneBtn
+      ? (phoneBtn.getAttribute('data-item-id') ?? '').replace('phone:tel:', '')
+      : '';
+
+    const addrBtn = document.querySelector('button[data-item-id="address"]');
+    const address = addrBtn
+      ? (addrBtn.getAttribute('aria-label') ?? '').replace(/^Address:\s*/i, '')
+      : '';
+
+    const category = text(document.querySelector('button[jsaction*="category"]'));
+    const name = text(document.querySelector('h1'));
+
+    // The header rating block reads like "4.5(1,234)" or "4.5 (1,234 reviews)".
+    let rating = 0;
+    let reviewCount = 0;
+    const ratingText = text(document.querySelector('div.F7nice'));
+    const m = ratingText.match(/([\d.]+)\D+([\d,]+)/);
+    if (m) {
+      rating = Number.parseFloat(m[1] ?? '') || 0;
+      reviewCount = Number.parseInt((m[2] ?? '').replace(/,/g, ''), 10) || 0;
+    }
+
+    return { website, phone, address, category, name, rating, reviewCount };
+  });
+
+  if (d.website) lead.website = d.website;
+  if (d.phone) lead.phone = d.phone;
+  if (d.address) lead.address = d.address;
+  if (d.category) lead.category = d.category;
+  if (d.name) lead.title = d.name;
+  if (d.rating) lead.rating = d.rating;
+  if (d.reviewCount) lead.reviewCount = d.reviewCount;
 }
 
 async function parseCard(
