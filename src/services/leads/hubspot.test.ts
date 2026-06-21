@@ -53,4 +53,20 @@ describe('pushContacts', () => {
     expect(result.created).toBe(1); // reported as would-create
     expect(calls.some((c) => c.includes('/objects/contacts') && !c.includes('search'))).toBe(false);
   });
+
+  it('counts a failed lead and continues the batch', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes('/properties/contacts')) return jsonResponse({ results: [] });
+      if (u.includes('/contacts/search')) return jsonResponse({ results: [] });
+      if (u.includes('/objects/contacts')) return jsonResponse({ message: 'bad' }, 400);
+      return jsonResponse({}, 404);
+    }) as unknown as typeof fetch;
+
+    const leads = [lead, { title: 'Beta Corp', email: 'beta@beta.com', phone: '' }];
+    const result = await pushContacts({ token: 'pat-x', leads, dryRun: false, fetchImpl });
+    expect(result.failed).toBe(2);
+    expect(result.results.every((r) => r.status === 'failed')).toBe(true);
+    expect(result.results[0]!.error).toBeTruthy();
+  });
 });

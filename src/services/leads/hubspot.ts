@@ -84,6 +84,10 @@ async function createContact(
         body: JSON.stringify({ properties }),
       });
     } catch (err) {
+      if (attempt < MAX_RETRIES) {
+        await sleep(RETRY_BACKOFF_MS * attempt);
+        continue;
+      }
       return { error: err instanceof Error ? err.message : String(err) };
     }
     if (res.ok) {
