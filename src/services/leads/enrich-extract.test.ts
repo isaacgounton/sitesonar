@@ -39,6 +39,39 @@ describe('extractSocialLinks', () => {
     expect(s.facebook).toBe('https://www.facebook.com/acmelaw');
     expect(s.instagram).toBeUndefined();
   });
+
+  it('prefers a profile over a post/reel link', () => {
+    const page = `
+      <a href="https://www.instagram.com/p/DRvgHjhjHaS/?img_index=1">a post</a>
+      <a href="https://www.instagram.com/epochcoffee">profile</a>
+      <a href="https://www.facebook.com/reel/123456">a reel</a>
+      <a href="https://www.facebook.com/epochcoffee/">page</a>
+    `;
+    const s = extractSocialLinks(page);
+    expect(s.instagram).toBe('https://www.instagram.com/epochcoffee');
+    expect(s.facebook).toBe('https://www.facebook.com/epochcoffee/');
+  });
+
+  it('falls back to a post link when no profile is present', () => {
+    const page = '<a href="https://www.instagram.com/p/DRvgHjhjHaS/">only a post</a>';
+    expect(extractSocialLinks(page).instagram).toBe('https://www.instagram.com/p/DRvgHjhjHaS/');
+  });
+
+  it('skips share/login junk links', () => {
+    const page = `
+      <a href="https://www.facebook.com/sharer/sharer.php?u=https://x.com">share</a>
+      <a href="https://www.facebook.com/login.php?next=x">login</a>
+    `;
+    expect(extractSocialLinks(page).facebook).toBeUndefined();
+  });
+
+  it('prefers a linkedin company page over a personal profile', () => {
+    const page = `
+      <a href="https://www.linkedin.com/in/jane-doe">person</a>
+      <a href="https://www.linkedin.com/company/acme">company</a>
+    `;
+    expect(extractSocialLinks(page).linkedin).toBe('https://www.linkedin.com/company/acme');
+  });
 });
 
 describe('bestEmail', () => {

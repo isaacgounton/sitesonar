@@ -240,7 +240,7 @@ async function augmentWithDetails(page: Page, lead: Lead): Promise<void> {
 
     const addrBtn = document.querySelector('button[data-item-id="address"]');
     const address = addrBtn
-      ? (addrBtn.getAttribute('aria-label') ?? '').replace(/^Address:\s*/i, '')
+      ? (addrBtn.getAttribute('aria-label') ?? '').replace(/^Address:\s*/i, '').trim()
       : '';
 
     const category = text(document.querySelector('button[jsaction*="category"]'));

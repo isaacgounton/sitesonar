@@ -39,18 +39,50 @@ interface SocialLinks {
   instagram?: string;
 }
 
+// Share widgets / auth endpoints — never a usable profile, skip outright.
+const SOCIAL_JUNK = /\/(sharer|share|plugins|dialog|intent|login|tr)\b/i;
+// Deep links (a post/reel/story), not the account's profile/page.
+const SOCIAL_DEEP =
+  /\/(p|reel|reels|tv|stories|explore|watch|events|groups|photo|posts|permalink\.php)\b/i;
+
+/**
+ * Rank a social URL by how likely it is to be the account's profile/page (so a
+ * profile beats a stray post or reel link on the page). Higher is better; -1
+ * means "skip entirely" (share/login junk or unparseable).
+ */
+function socialScore(key: keyof SocialLinks, href: string): number {
+  let path: string;
+  try {
+    path = new URL(href).pathname;
+  } catch {
+    return -1;
+  }
+  if (SOCIAL_JUNK.test(path)) return -1;
+  if (key === 'linkedin') {
+    if (/\/company\//i.test(path)) return 3;
+    if (/\/(in|school|showcase)\//i.test(path)) return 2;
+    return 1;
+  }
+  // instagram / facebook: a bare handle path (/name) is the profile.
+  if (SOCIAL_DEEP.test(path)) return 1;
+  return path.split('/').filter(Boolean).length <= 1 ? 3 : 2;
+}
+
 export function extractSocialLinks(html: string): SocialLinks {
   const $ = cheerio.load(html);
   const out: SocialLinks = {};
+  const best: Partial<Record<keyof SocialLinks, number>> = {};
   $('a[href]').each((_, el) => {
     const href = $(el).attr('href') ?? '';
     if (!/^https?:\/\//i.test(href)) return;
     for (const [key, re] of SOCIAL_HOSTS) {
       if (!re.test(href)) continue;
-      const current = out[key];
-      // Upgrade a personal LinkedIn to a company page if found later.
-      if (!current || (key === 'linkedin' && /\/company\//.test(href) && !/\/company\//.test(current))) {
+      const score = socialScore(key, href);
+      if (score < 0) continue;
+      // Keep the highest-scoring link per platform; first seen wins ties.
+      if (best[key] === undefined || score > best[key]!) {
         out[key] = href;
+        best[key] = score;
       }
     }
   });
