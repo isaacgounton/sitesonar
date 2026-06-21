@@ -1,4 +1,4 @@
-import { chromium, type BrowserContext } from 'playwright';
+import { chromium, type BrowserContext, type Page } from 'playwright';
 import type { BrowserPool } from '../../browser.js';
 import { deriveProxy } from '../../proxy.js';
 import { Lead, MapsBlockedError } from './types.js';
@@ -58,6 +58,35 @@ export async function scrapeGoogleMaps(
   }
 }
 
+/**
+ * Click through the Google consent interstitial (consent.google.com). Tries a
+ * few button variants (the page localises and restructures often); each click
+ * is raced against the URL leaving consent.google.com so we proceed as soon as
+ * any one works. No-op if none match — the caller re-checks the URL.
+ */
+async function acceptConsent(page: Page): Promise<void> {
+  const offConsent = (u: URL): boolean => !u.toString().includes('consent.google.com');
+  const selectors = [
+    'button[aria-label*="Accept all" i]',
+    'button[aria-label*="Reject all" i]',
+    'form[action*="consent"] button[type="submit"]',
+    'button:has-text("Accept all")',
+    'button:has-text("Reject all")',
+    'button:has-text("I agree")',
+  ];
+  for (const sel of selectors) {
+    try {
+      await Promise.all([
+        page.waitForURL(offConsent, { timeout: 20_000 }),
+        page.click(sel, { timeout: 3_000 }),
+      ]);
+      return;
+    } catch {
+      /* selector absent or navigation didn't fire — try the next variant */
+    }
+  }
+}
+
 async function runScrape(
   context: BrowserContext,
   args: ScrapeArgs,
@@ -70,6 +99,21 @@ async function runScrape(
   await context.addInitScript(
     "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})",
   );
+
+  // Pre-accept Google's EU cookie consent so the search isn't redirected to
+  // consent.google.com, which otherwise hides every result behind an
+  // interstitial (seen on EU-hosted IPs). Best-effort — a stale cookie is
+  // harmless, and acceptConsent() below is the interactive fallback.
+  await context.addCookies([
+    { name: 'CONSENT', value: 'YES+', domain: '.google.com', path: '/' },
+    {
+      name: 'SOCS',
+      value: 'CAESHAgBEhJnd3NfMjAyMzA3MjUtMF9SQzEaAmVuIAEaBgiAo_CmBg',
+      domain: '.google.com',
+      path: '/',
+    },
+  ]);
+
   const page = await context.newPage();
   const url = `https://www.google.com/maps/search/${encodeURIComponent(args.query)}`;
 
@@ -83,6 +127,16 @@ async function runScrape(
   const landed = page.url();
   if (landed.includes('accounts.google.com') || landed.includes('/sorry/')) {
     throw new MapsBlockedError(landed);
+  }
+
+  // EU consent wall: if Google still redirected to consent.google.com, click
+  // through it. If we can't get past it, surface a clear block error rather
+  // than an opaque "no results".
+  if (page.url().includes('consent.google.com')) {
+    await acceptConsent(page);
+    if (page.url().includes('consent.google.com')) {
+      throw new MapsBlockedError(page.url());
+    }
   }
 
   // Dismiss consent (best-effort).
