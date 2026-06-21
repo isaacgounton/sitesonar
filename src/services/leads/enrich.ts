@@ -89,17 +89,18 @@ async function enrichOne(lead: Lead, args: EnrichArgs, warnings: string[]): Prom
     return lead;
   }
   const deadline = Date.now() + args.timeoutMs;
+  const remaining = () => Math.max(1, deadline - Date.now());
   const base = `https://${domain}`;
   const out: Lead = { ...lead };
   const emails: string[] = [];
 
-  const homepage = await fetchStatic(base, 10_000);
+  const homepage = await fetchStatic(base, Math.min(10_000, remaining()));
   const urls = candidateUrls(base, homepage, 5);
   const htmls: Record<string, string> = homepage ? { [base]: homepage } : {};
 
   for (const url of urls) {
     if (Date.now() > deadline) break;
-    const html = htmls[url] ?? (await fetchStatic(url, 10_000));
+    const html = htmls[url] ?? (await fetchStatic(url, Math.min(10_000, remaining())));
     if (!html) continue;
     applyMeta(out, html);
     applySocials(out, html);
@@ -114,7 +115,7 @@ async function enrichOne(lead: Lead, args: EnrichArgs, warnings: string[]): Prom
   if (emails.length === 0 && args.headlessFallback) {
     for (const url of urls.slice(0, 2)) {
       if (Date.now() > deadline) break;
-      const html = await fetchHeadless(args.browser, url, 12_000);
+      const html = await fetchHeadless(args.browser, url, Math.min(12_000, remaining()));
       if (!html) continue;
       applyMeta(out, html);
       applySocials(out, html);

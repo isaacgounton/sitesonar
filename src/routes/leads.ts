@@ -17,7 +17,7 @@ const ScrapeBody = z
     query: z.string().min(2).max(200).optional(),
     industry: z.string().min(2).max(120).optional(),
     location: z.string().min(2).max(120).optional(),
-    max: z.number().int().min(1).default(20),
+    max: z.number().int().min(1).max(500).default(20),
     proxyUrl: z.string().url().optional(),
     proxyBypass: z.string().optional(),
   })
@@ -77,7 +77,7 @@ export const leadsRoutes =
               query: { type: 'string', minLength: 2, maxLength: 200 },
               industry: { type: 'string', minLength: 2, maxLength: 120 },
               location: { type: 'string', minLength: 2, maxLength: 120 },
-              max: { type: 'integer', minimum: 1, default: 20 },
+              max: { type: 'integer', minimum: 1, maximum: 500, default: 20, description: 'Number of results to collect. Hard-capped server-side by LEADS_MAX_RESULTS (default 120).' },
               proxyUrl: { type: 'string', format: 'uri' },
               proxyBypass: { type: 'string' },
             },
