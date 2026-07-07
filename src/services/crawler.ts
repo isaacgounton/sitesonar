@@ -49,6 +49,7 @@ function emptyMetadata(): PageMetadata {
     linkList: [],
     responseHeaders: emptyResponseHeaders(),
     listsTruncated: { images: false, links: false },
+    wordCount: 0,
   };
 }
 

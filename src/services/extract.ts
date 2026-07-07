@@ -83,6 +83,8 @@ export interface PageMetadata {
   responseHeaders: ResponseHeaders;
   /** True when imageList or linkList was truncated by the per-page cap. */
   listsTruncated: { images: boolean; links: boolean };
+  /** Visible body text word count (script/style/noscript stripped). */
+  wordCount: number;
 }
 
 /**
@@ -215,6 +217,11 @@ export function extractMetadata(html: string, pageUrl: string): PageMetadata {
     });
   });
 
+  // Word count last — removing script/style mutates the tree the extractors above read.
+  $('script, style, noscript').remove();
+  const bodyText = ($('body').text() || $.root().text()).replace(/\s+/g, ' ').trim();
+  const wordCount = bodyText ? bodyText.split(' ').length : 0;
+
   return {
     title: $('title').first().text().trim() || null,
     description: $('meta[name="description"]').attr('content')?.trim() ?? null,
@@ -235,6 +242,7 @@ export function extractMetadata(html: string, pageUrl: string): PageMetadata {
     linkList,
     responseHeaders: emptyResponseHeaders(),
     listsTruncated: { images: imagesTruncated, links: linksTruncated },
+    wordCount,
   };
 }
 
