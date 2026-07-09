@@ -74,6 +74,8 @@ export interface PageMetadata {
   images: {
     total: number;
     missingAlt: number;
+    /** Inline <svg> elements — real visual content that <img> counting misses. */
+    svg: number;
   };
   /** First IMAGE_LIST_CAP <img> elements with src resolved against finalUrl. */
   imageList: ImageDetail[];
@@ -183,6 +185,9 @@ export function extractMetadata(html: string, pageUrl: string): PageMetadata {
   });
 
   const imgs = $('img');
+  // Inline SVG icons/illustrations are visual content the <img> list can't see —
+  // count them so consumers don't mistake an SVG-built page for having no visuals.
+  const svgCount = $('svg').length;
   let missingAlt = 0;
   const imageList: ImageDetail[] = [];
   let imagesTruncated = false;
@@ -237,7 +242,7 @@ export function extractMetadata(html: string, pageUrl: string): PageMetadata {
       h3: collectHeadings('h3'),
     },
     links: { internal, external, nofollow },
-    images: { total: imgs.length, missingAlt },
+    images: { total: imgs.length, missingAlt, svg: svgCount },
     imageList,
     linkList,
     responseHeaders: emptyResponseHeaders(),

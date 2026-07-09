@@ -56,7 +56,7 @@ function emptyMetadata(): PageMetadata {
     twitterCard: {},
     headings: { h1: [], h2: [], h3: [] },
     links: { internal: 0, external: 0, nofollow: 0 },
-    images: { total: 0, missingAlt: 0 },
+    images: { total: 0, missingAlt: 0, svg: 0 },
     imageList: [],
     linkList: [],
     responseHeaders: emptyResponseHeaders(),

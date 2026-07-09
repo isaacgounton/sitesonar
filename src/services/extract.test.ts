@@ -19,6 +19,17 @@ describe('extractMetadata wordCount', () => {
     expect(m.wordCount).toBe(0);
   });
 
+  it('counts inline SVG as visual content separate from <img>', () => {
+    const html = `<html><body>
+      <img src="/a.png" alt="a">
+      <svg viewBox="0 0 1 1"><path/></svg>
+      <svg viewBox="0 0 1 1"><circle/></svg>
+    </body></html>`;
+    const m = extractMetadata(html, 'https://example.com/');
+    expect(m.images.total).toBe(1);
+    expect(m.images.svg).toBe(2);
+  });
+
   it('does not break heading/link extraction (word count runs last)', () => {
     const html = `<html><body>
       <h1>Head</h1>
