@@ -5,17 +5,36 @@ const PHONE_RE = /(\+\d{1,2}\s)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g;
 
 // Image/asset emails that are never real contacts.
 const EMAIL_JUNK = /\.(png|jpg|jpeg|gif|svg|webp|css|js)$/i;
+// Placeholder/bot addresses that pass an MX check but are never a real inbox:
+// - hash local parts (Sentry/Wix error-tracking beacons, e.g. <32-hex>@sentry-next.wixpress.com)
+// - tracking / site-builder / example domains that emit machine addresses
+// - no-reply style mailboxes that bounce or are never read
+const EMAIL_HASH_LOCAL = /^[0-9a-f]{16,}@/i;
+const EMAIL_JUNK_DOMAIN =
+  /@([^@]*\.)?(wixpress\.com|sentry(-next)?\.[^@]+|sentry\.io|example\.(com|org|net)|test\.(com|org)|localhost|invalid|godaddysites\.com|squarespace\.com)$/i;
+const EMAIL_NOREPLY = /^(no-?reply|do-?not-?reply|donotreply|mailer-daemon|bounce)[@.]/i;
+
+export function isJunkEmail(addr: string): boolean {
+  return (
+    EMAIL_JUNK.test(addr) ||
+    EMAIL_HASH_LOCAL.test(addr) ||
+    EMAIL_JUNK_DOMAIN.test(addr) ||
+    EMAIL_NOREPLY.test(addr)
+  );
+}
 
 export function extractEmails(html: string): string[] {
   const found = new Set<string>();
   const $ = cheerio.load(html);
   $('a[href^="mailto:"]').each((_, el) => {
-    const addr = (($(el).attr('href') ?? '').replace(/^mailto:/i, '').split('?')[0] ?? '').trim();
-    if (addr) found.add(addr.toLowerCase());
+    const addr = (($(el).attr('href') ?? '').replace(/^mailto:/i, '').split('?')[0] ?? '')
+      .trim()
+      .toLowerCase();
+    if (addr && !isJunkEmail(addr)) found.add(addr);
   });
   for (const m of html.matchAll(EMAIL_RE)) {
     const addr = m[0].toLowerCase();
-    if (!EMAIL_JUNK.test(addr)) found.add(addr);
+    if (!isJunkEmail(addr)) found.add(addr);
   }
   return [...found];
 }

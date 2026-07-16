@@ -9,6 +9,7 @@ import {
   bestEmail,
   candidateUrls,
   extractMeta,
+  isJunkEmail,
 } from './enrich-extract.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -23,6 +24,26 @@ describe('extractEmails', () => {
     expect(emails).toContain('info@acmelaw.com');
     expect(emails).toContain('partners@acmelaw.com');
     expect(new Set(emails).size).toBe(emails.length);
+  });
+
+  it('drops bot/placeholder addresses (Sentry/Wix hashes, no-reply, example)', () => {
+    const page = `
+      <a href="mailto:605a7baede844d278b89dc95ae0a9123@sentry-next.wixpress.com">hash</a>
+      <a href="mailto:no-reply@acmelaw.com">noreply</a>
+      Contact hello@acmelaw.com or test@example.com
+    `;
+    const emails = extractEmails(page);
+    expect(emails).toContain('hello@acmelaw.com');
+    expect(emails).not.toContain('605a7baede844d278b89dc95ae0a9123@sentry-next.wixpress.com');
+    expect(emails).not.toContain('no-reply@acmelaw.com');
+    expect(emails).not.toContain('test@example.com');
+  });
+
+  it('isJunkEmail keeps real addresses, rejects placeholders', () => {
+    expect(isJunkEmail('info@acmelaw.com')).toBe(false);
+    expect(isJunkEmail('605a7baede844d278b89dc95ae0a9123@sentry-next.wixpress.com')).toBe(true);
+    expect(isJunkEmail('logo@brand.png')).toBe(true);
+    expect(isJunkEmail('noreply@wix.com')).toBe(true);
   });
 });
 
