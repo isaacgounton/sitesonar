@@ -2,9 +2,10 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { BrowserPool } from '../browser.js';
 import type { Config } from '../config.js';
-import { composeQuery, MapsBlockedError, HubspotNotConfiguredError } from '../services/leads/types.js';
+import { Lead, composeQuery, MapsBlockedError, HubspotNotConfiguredError } from '../services/leads/types.js';
 import { pushContacts } from '../services/leads/hubspot.js';
 import { scrapeGoogleMaps } from '../services/leads/maps.js';
+import { scrapeOverpass, mergeByTitle } from '../services/leads/overpass.js';
 import { enrichLeads } from '../services/leads/enrich.js';
 
 interface LeadsDeps {
@@ -21,6 +22,8 @@ const ScrapeBody = z
     details: z.boolean().default(false),
     proxyUrl: z.string().url().optional(),
     proxyBypass: z.string().optional(),
+    osmFallback: z.boolean().default(true),
+    overpassUrl: z.string().url().optional(),
   })
   .refine((b) => Boolean(b.query) || Boolean(b.industry), {
     message: 'Provide `query` or `industry` (with optional `location`).',
@@ -69,7 +72,7 @@ export const leadsRoutes =
       {
         schema: {
           description:
-            'Scrape Google Maps for businesses. Provide `query` (raw) or `industry` (+ optional `location`). Set `details: true` to open each result\'s detail panel for website, phone, full address, review count, and category (the list view omits these) — slower, one navigation per result. Optional `proxyUrl` routes this scrape through a per-request proxy (falls back to the global PROXY_URL). Synchronous and long-running; bounded by `max` and LEADS_SCRAPE_TIMEOUT_MS.',
+            'Scrape Google Maps for businesses. Provide `query` (raw) or `industry` (+ optional `location`). Set `details: true` to open each result\'s detail panel for website, phone, full address, review count, and category (the list view omits these) — slower, one navigation per result. Optional `proxyUrl` routes this scrape through a per-request proxy (falls back to the global PROXY_URL). When Maps returns fewer than `max` results (or is blocked), the results are topped up from OpenStreetMap — free, no ban risk — provided `industry` and `location` were given (set `osmFallback: false` to disable). Synchronous and long-running; bounded by `max` and LEADS_SCRAPE_TIMEOUT_MS.',
           tags: ['leads'],
           security: [{ bearerAuth: [] }],
           body: {
@@ -82,6 +85,8 @@ export const leadsRoutes =
               details: { type: 'boolean', default: false, description: 'Open each result\'s detail panel to extract website/phone/full address/review count/category. Slower (one navigation per result); use a smaller `max`.' },
               proxyUrl: { type: 'string', format: 'uri' },
               proxyBypass: { type: 'string' },
+              osmFallback: { type: 'boolean', default: true, description: 'Top up from OpenStreetMap when Google Maps returns fewer than `max` results or is blocked. Needs `industry` + `location`.' },
+              overpassUrl: { type: 'string', format: 'uri', description: 'Override the Overpass endpoint used for the OSM fallback (default rotates public mirrors).' },
             },
           },
         },
@@ -94,9 +99,17 @@ export const leadsRoutes =
         const body = parsed.data;
         const query = composeQuery(body);
         const max = Math.min(body.max, deps.config.leadsMaxResults);
+        // OSM can only run with a structured industry + location (it needs an
+        // area to search); a raw `query` alone can't drive it.
+        const canOsm = body.osmFallback && Boolean(body.industry) && Boolean(body.location);
 
+        const warnings: string[] = [];
+        let leads: Lead[] = [];
+
+        // 1) Google Maps (primary). A block or failure isn't fatal when OSM can
+        // back it up — we fall through to the top-up instead of erroring.
         try {
-          const { leads, warnings } = await scrapeGoogleMaps({
+          const r = await scrapeGoogleMaps({
             browser: deps.browser,
             query,
             max,
@@ -105,23 +118,55 @@ export const leadsRoutes =
             proxyBypass: body.proxyBypass,
             timeoutMs: deps.config.leadsScrapeTimeoutMs,
           });
-          return {
-            query,
-            count: leads.length,
-            leads,
-            warnings,
-            fetchedAt: new Date().toISOString(),
-          };
+          leads = r.leads;
+          warnings.push(...r.warnings);
         } catch (err) {
-          if (err instanceof MapsBlockedError) {
-            return reply.code(502).send({ error: 'maps_blocked', message: err.message });
+          const blocked = err instanceof MapsBlockedError;
+          if (!canOsm) {
+            if (blocked) {
+              return reply.code(502).send({ error: 'maps_blocked', message: err.message });
+            }
+            req.log.warn({ err }, 'leads scrape failed');
+            return reply.code(502).send({
+              error: 'scrape_failed',
+              message: err instanceof Error ? err.message : String(err),
+            });
           }
-          req.log.warn({ err }, 'leads scrape failed');
-          return reply.code(502).send({
-            error: 'scrape_failed',
-            message: err instanceof Error ? err.message : String(err),
-          });
+          warnings.push(`google maps ${blocked ? 'blocked' : 'failed'}: ${err instanceof Error ? err.message : String(err)}`);
+          req.log.warn({ err }, 'leads maps scrape failed; falling back to OSM');
         }
+
+        // 2) OpenStreetMap top-up when Maps came up short.
+        if (canOsm && leads.length < max) {
+          try {
+            const osm = await scrapeOverpass({
+              industry: body.industry as string,
+              location: body.location as string,
+              max,
+              overpassUrl: body.overpassUrl,
+              // OSM is fast (geocode + one query); cap it so a full Maps run
+              // plus fallback can't blow far past LEADS_SCRAPE_TIMEOUT_MS.
+              timeoutMs: Math.min(deps.config.leadsScrapeTimeoutMs, 60_000),
+            });
+            const before = leads.length;
+            leads = mergeByTitle(leads, osm.leads, max);
+            warnings.push(...osm.warnings);
+            if (leads.length > before) {
+              warnings.push(`topped up ${leads.length - before} lead(s) from OpenStreetMap`);
+            }
+          } catch (err) {
+            warnings.push(`osm fallback failed: ${err instanceof Error ? err.message : String(err)}`);
+            req.log.warn({ err }, 'leads osm fallback failed');
+          }
+        }
+
+        return {
+          query,
+          count: leads.length,
+          leads,
+          warnings,
+          fetchedAt: new Date().toISOString(),
+        };
       },
     );
 
