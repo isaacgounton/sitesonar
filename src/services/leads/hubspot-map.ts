@@ -15,11 +15,22 @@ export function firstLastFromTitle(title: string): { firstname: string; lastname
   return { firstname: title.trim(), lastname: '' };
 }
 
+/** Split a real person name into first + rest (e.g. directory leads). */
+export function splitPersonName(name: string): { firstname: string; lastname: string } {
+  const parts = name.trim().split(/\s+/);
+  return { firstname: parts[0] ?? '', lastname: parts.slice(1).join(' ') };
+}
+
 export function mapContactProperties(
   lead: Lead,
   opts: { industry?: string; existingProps: Set<string>; typeContactValue?: string },
 ): Record<string, string> {
-  const { firstname, lastname } = firstLastFromTitle(lead.title);
+  // A directory lead carries a real person in contactName; split that for the
+  // contact name and keep title as the company. Business leads have no
+  // contactName, so fall back to the legacy business-name-as-firstname mapping.
+  const { firstname, lastname } = lead.contactName?.trim()
+    ? splitPersonName(lead.contactName)
+    : firstLastFromTitle(lead.title);
   const props: Record<string, string> = {
     firstname: firstname || lead.title || 'Business',
     lastname,

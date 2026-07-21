@@ -2,6 +2,12 @@
 export interface Lead {
   // From /scrape
   title: string;
+  /**
+   * The named person at this lead (e.g. an attorney), when the source is a
+   * people-directory rather than a business listing. `title` stays the firm/
+   * company; HubSpot splits contactName into first/last when present.
+   */
+  contactName?: string;
   rating?: number;
   reviewCount?: number;
   phone?: string;

@@ -6,6 +6,7 @@ import { Lead, composeQuery, MapsBlockedError, HubspotNotConfiguredError } from 
 import { pushContacts } from '../services/leads/hubspot.js';
 import { scrapeGoogleMaps } from '../services/leads/maps.js';
 import { scrapeOverpass, mergeByTitle } from '../services/leads/overpass.js';
+import { runDirectories, mergeContacts, listDirectories } from '../services/leads/directories/registry.js';
 import { enrichLeads } from '../services/leads/enrich.js';
 
 interface LeadsDeps {
@@ -24,6 +25,7 @@ const ScrapeBody = z
     proxyBypass: z.string().optional(),
     osmFallback: z.boolean().default(true),
     overpassUrl: z.string().url().optional(),
+    directories: z.boolean().default(true),
   })
   .refine((b) => Boolean(b.query) || Boolean(b.industry), {
     message: 'Provide `query` or `industry` (with optional `location`).',
@@ -32,6 +34,7 @@ const ScrapeBody = z
 const LeadSchema = z
   .object({
     title: z.string(),
+    contactName: z.string().optional(),
     rating: z.number().optional(),
     reviewCount: z.number().optional(),
     phone: z.string().optional(),
@@ -87,6 +90,7 @@ export const leadsRoutes =
               proxyBypass: { type: 'string' },
               osmFallback: { type: 'boolean', default: true, description: 'Top up from OpenStreetMap when Google Maps returns fewer than `max` results or is blocked. Needs `industry` + `location`.' },
               overpassUrl: { type: 'string', format: 'uri', description: 'Override the Overpass endpoint used for the OSM fallback (default rotates public mirrors).' },
+              directories: { type: 'boolean', default: true, description: 'Also pull matching professional directories (bar registries, etc.) — named people with real emails. Auto-selected by `industry` + `location`; see GET /v1/leads/directories. Set false to disable.' },
             },
           },
         },
@@ -136,7 +140,32 @@ export const leadsRoutes =
           req.log.warn({ err }, 'leads maps scrape failed; falling back to OSM');
         }
 
-        // 2) OpenStreetMap top-up when Maps came up short.
+        // 2) Directory sources (bar registries, etc.) — named people with real
+        // emails. Auto-selected by industry+location; merged by email/person so
+        // several attorneys at one firm (and the firm's own listing) all survive.
+        if (body.directories && body.industry && body.location) {
+          try {
+            const dir = await runDirectories({
+              industry: body.industry,
+              location: body.location,
+              max,
+              timeoutMs: Math.min(deps.config.leadsScrapeTimeoutMs, 60_000),
+            });
+            warnings.push(...dir.warnings);
+            if (dir.leads.length) {
+              const before = leads.length;
+              leads = mergeContacts(leads, dir.leads, max);
+              if (leads.length > before) {
+                warnings.push(`added ${leads.length - before} contact(s) from directories: ${dir.ran.join(', ')}`);
+              }
+            }
+          } catch (err) {
+            warnings.push(`directories failed: ${err instanceof Error ? err.message : String(err)}`);
+            req.log.warn({ err }, 'leads directories failed');
+          }
+        }
+
+        // 3) OpenStreetMap top-up when Maps + directories came up short.
         if (canOsm && leads.length < max) {
           try {
             const osm = await scrapeOverpass({
@@ -168,6 +197,19 @@ export const leadsRoutes =
           fetchedAt: new Date().toISOString(),
         };
       },
+    );
+
+    app.get(
+      '/v1/leads/directories',
+      {
+        schema: {
+          description:
+            'List the professional-directory sources /v1/leads/scrape can pull from (bar registries, etc.), with their category (sector/specialties/regions) and whether they yield email-ready contacts. The browsable catalogue for expansion.',
+          tags: ['leads'],
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async () => ({ directories: listDirectories() }),
     );
 
     app.post(
